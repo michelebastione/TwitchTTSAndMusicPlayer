@@ -4,7 +4,7 @@ import threading
 import random
 
 DEFAULT_USER_FILE = 'users.json'
-BANNED_USERS = {'nightbot'}
+BANNED_FROM_TTS = {'nightbot'}
 
 
 class TTSHandler(threading.Thread):
@@ -45,7 +45,7 @@ class TTSHandler(threading.Thread):
         self.message_condition.release()
 
     def change_voice(self, username, message):
-        tokens = message.split(' ')
+        tokens = message.split()
         if tokens[0] != '!voice':
             return False
 
@@ -71,7 +71,7 @@ class TTSHandler(threading.Thread):
         return True
 
     def run(self):
-        print('Handler Starting!')
+        print('TTS Handler Starting!')
         self.engine = pyttsx3.init()
         self.voices = self.engine.getProperty('voices')
 
@@ -83,7 +83,7 @@ class TTSHandler(threading.Thread):
                 self.message_condition.wait()
 
             for username, message in self.message_queue:
-                if username in BANNED_USERS:
+                if username in BANNED_FROM_TTS:
                     continue
                 if username not in self.users:
                     self.users[username] = (random.randrange(len(self.voices)), random.randint(180, 220))
@@ -108,7 +108,7 @@ class TTSHandler(threading.Thread):
             if has_messages:
                 self.engine.runAndWait()
                 has_messages = False
-        print('Handler stopping')
+        print('TTS handler stopping')
 
 
 def test():

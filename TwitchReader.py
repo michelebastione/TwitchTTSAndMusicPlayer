@@ -6,11 +6,13 @@ from emoji import demojize
 from TTSHandler import TTSHandler
 
 DEFAULT_TWITCH_FILE = 'twitch_config.json'
+TTS_COMMANDS = {"!voice "}
+MEDIA_COMMANDS = {"!sr ", "!play", "!pause", "!skip", "!rewind", "!vol "}
 
 
 def decode(message):
     message = demojize(message).replace('\r', '')
-    username, channel, message = re.search(r':(.*)\!.*@.*\.tmi\.twitch\.tv PRIVMSG #(.*?) :(.*)', message).groups()
+    username, channel, message = re.search(r':(.*)!.*@.*\.tmi\.twitch\.tv PRIVMSG #(.*?) :(.*)', message).groups()
     # remove web links
     message = re.sub(r'http(s?)://\S+|\S+\.com/\S+', 'web link', message)
     return username, message
@@ -32,7 +34,8 @@ class TwitchReader(threading.Thread):
         self.load_config()
 
         self.debug_output = False
-        self.handler = None
+        self.tts_handler = None
+        self.media_handler = None
         self.running = False
 
     def load_config(self, filename=DEFAULT_TWITCH_FILE):
@@ -52,6 +55,8 @@ class TwitchReader(threading.Thread):
     def run(self):
         print('Connecting to Twitch')
         sock = socket.socket()
+        sock.settimeout(5)
+
         sock.connect((self._config['server'], self._config['port']))
         sock.send(f'PASS {self._config["token"]}\n'.encode('utf-8'))
         sock.send(f'NICK {self._config["nickname"]}\n'.encode('utf-8'))
@@ -60,14 +65,22 @@ class TwitchReader(threading.Thread):
         print('Entering Chat loop')
         self.running = True
         while self.running:
-            resp = sock.recv(2048).decode('utf-8')
+            # being the socket non-asynchronous it was deadlocking the process of shut down, so I added a timeout
+            # to force the function call to exit and end the loop, which is not the ideal way to handle the situation.
+            # it would probably be a better idea to refactor the threads into tasks if possible
+            try:
+                resp = sock.recv(2048).decode('utf-8')
+            except socket.timeout:
+                continue
 
             if resp.startswith('PING'):
                 sock.send("PONG :tmi.twitch.tv2 3\n".encode('utf-8'))
             elif len(resp) > 0 and 'PRIVMSG' in resp:
-                if self.handler is not None:
-                    username, message = decode(resp)
-                    self.handler.receive(username, message)
+                username, message = decode(resp)
+                if any(message.startswith(cmd) for cmd in MEDIA_COMMANDS) and self.media_handler is not None:
+                    self.media_handler.receive(username, message)
+                elif self.tts_handler is not None:
+                    self.tts_handler.receive(username, message)
                     # sock.send(f'PRIVMSG {self._config["channel"]} :received message\n'.encode('utf-8'))
             if self.debug_output:
                 print(resp)
@@ -77,6 +90,6 @@ class TwitchReader(threading.Thread):
 
 if __name__ == '__main__':
     reader = TwitchReader()
-    reader.handler = TTSHandler()
+    reader.tts_handler = TTSHandler()
     reader.debug_output = True
     reader.run()
