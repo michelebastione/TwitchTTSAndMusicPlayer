@@ -65,10 +65,10 @@ The `rate` is a number (the default is 200).
 Users can add songs to the playlist by typing `!sr` followed by the song name or part of it in chat, if a match is found in the specified music directory it will be reproduced.
 
 Users specified as editors can also use the following commands:
-	- `!pause`: Pause the reproduction
-	- `!play`: Unpause the reproduction
-	- `!skip`: Skip the current song
-	- `!rewind`: Replay the current song before it ends
-	- `!vol up`: Increase volume by 10%
-	- `!vol down`: Decrease volume by 10%
-	- `!vol [value]`: Sets the volume to the specified value (1-100)
+- `!pause`: Pause the reproduction
+- `!play`: Unpause the reproduction
+- `!skip`: Skip the current song
+- `!rewind`: Replay the current song before it ends
+- `!vol up`: Increase volume by 10%
+- `!vol down`: Decrease volume by 10%
+- `!vol [value]`: Sets the volume to the specified value (1-100)
