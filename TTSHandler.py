@@ -1,125 +1,108 @@
-import pyttsx3
+import os
 import json
-import threading
 import random
+import threading
+from queue import Queue
 
-DEFAULT_USER_FILE = 'users.json'
-BANNED_FROM_TTS = {'nightbot'}
+import typing
+from typing import List
+
+import pyttsx3
+from pyttsx3.voice import Voice
 
 
 class TTSHandler(threading.Thread):
-    def __init__(self, name='TTSHandler'):
+    def __init__(self, config: dict, name='TTSHandler'):
         threading.Thread.__init__(self)
         self.name = name
-        self.users = {}
-        self.engine = None
-        self.voices = []
-        self.load_users()
+        self.banned_from_tts = config["banned"]
+        self.users_settings = config["users_settings"]
 
-        self.message_queue = []
-        self.message_condition = threading.Condition()
+        self.__engine: pyttsx3.Engine
+        self.__message_queue: Queue[tuple[str, str]] = Queue()
+        self._voices: List[Voice] = []
+        self._users = self._load_users()
         self.running = False
 
-    def load_users(self, filename=DEFAULT_USER_FILE):
-        try:
-            with open(filename, 'r') as f:
-                file_users = json.load(f)
-                self.users.update(file_users)
-        except IOError:
-            pass
+    def _load_users(self):
+        filename = self.users_settings
+        if os.path.exists(filename):
+            with open(filename) as file:
+                return json.load(file)
+        else:
+            return {}
 
-    def save_users(self, filename=DEFAULT_USER_FILE):
-        with open(filename, 'w+') as f:
-            json.dump(self.users, f)
+    def _save_users(self):
+        filename = self.users_settings
+        with open(filename, 'w') as f:
+            json.dump(self._users, f)
 
-    def receive(self, username, message):
-        self.message_condition.acquire()
-        self.message_queue.append((username, message))
-        self.message_condition.notify()
-        self.message_condition.release()
+    def add_message(self, username, message):
+        self.__message_queue.put((username, message))
 
-    def stop(self):
-        self.message_condition.acquire()
-        self.running = False
-        self.message_condition.notify()
-        self.message_condition.release()
-
-    def change_voice(self, username, message):
+    def __change_voice(self, username, message):
         tokens = message.split()
         if tokens[0] != '!voice':
             return False
 
         voice_name = tokens[1].upper()
+        user_voice = self._users[username][0]
 
-        voice = self.users[username][0]
-        for i, v in enumerate(self.voices):
-            id_name = str(v.id).rsplit('\\', 1)[1].strip('1234567890._').upper()
-            # handle 2 letter codes separately, so that we dont just match the first name that contains those letters
+        for index, voice in enumerate(self._voices):
+            id_name = str(voice.id).rsplit('\\', 1)[1].strip('1234567890._').upper()
+
+            # handle 2-letter codes separately, so that we don't just match the first name that contains those letters
             if len(voice_name) == 2 and f'{voice_name}-' in id_name or f'{voice_name}_' in id_name:
-                voice = i
+                user_voice = index
                 break
             elif voice_name in id_name:
-                voice = i
+                user_voice = index
                 break
 
         try:
             rate = int(tokens[-1])
         except ValueError:
-            rate = self.users[username][1]
+            rate = self._users[username][1]
 
-        self.users[username] = (voice, rate)
+        self._users[username] = (user_voice, rate)
         return True
 
     def run(self):
         print('TTS Handler Starting!')
-        self.engine = pyttsx3.init()
-        self.voices = self.engine.getProperty('voices')
+        self.__engine = pyttsx3.init()
+        self.__engine.startLoop(False)
+        self._voices = typing.cast(List[Voice], self.__engine.getProperty('voices'))
 
         self.running = True
-        has_messages = False
         while self.running:
-            self.message_condition.acquire()
-            while not self.message_queue and self.running:
-                self.message_condition.wait()
+            if self.__message_queue.empty():
+                self.__engine.iterate()
+                continue
 
-            for username, message in self.message_queue:
-                if username in BANNED_FROM_TTS:
-                    continue
-                if username not in self.users:
-                    self.users[username] = (random.randrange(len(self.voices)), random.randint(180, 220))
+            username, message = self.__message_queue.get()
+            self.__message_queue.task_done()
 
-                if message.startswith('!voice '):
-                    if self.change_voice(username, message):
-                        self.engine.setProperty('voice', self.voices[self.users[username][0]].id)
-                        self.engine.setProperty('rate', self.users[username][1])
-                        self.engine.say(f'{username} has changed voices')
-                else:
-                    try:
-                        self.engine.setProperty('voice', self.voices[self.users[username][0]].id)
-                    except IndexError:
-                        self.engine.setProperty('voice', self.voices[0].id)
-                    self.engine.setProperty('rate', self.users[username][1])
-                    self.engine.say(message)
-                has_messages = True
-            self.message_queue.clear()
+            if username in self.banned_from_tts:
+                continue
+            if username not in self._users:
+                self._users[username] = (random.randrange(len(self._voices)), random.randint(180, 220))
 
-            self.message_condition.release()
-            # release the lock so that other messages can be queued while current ones are read
-            if has_messages:
-                self.engine.runAndWait()
-                has_messages = False
+            if message.startswith('!voice '):
+                if self.__change_voice(username, message):
+                    self.__engine.setProperty('voice', self._voices[self._users[username][0]].id)
+                    self.__engine.setProperty('rate', self._users[username][1])
+                    self.__engine.say(f'{username} has changed voices')
+            else:
+                try:
+                    self.__engine.setProperty('voice', self._voices[self._users[username][0]].id)
+                except IndexError:
+                    self.__engine.setProperty('voice', self._voices[0].id)
+                self.__engine.setProperty('rate', self._users[username][1])
+                self.__engine.say(message)
+
+        self.__engine.endLoop()
+
+    def stop(self):
         print('TTS handler stopping')
-
-
-def test():
-    engine = pyttsx3.init()
-    voices = engine.getProperty('voices')
-    for i, v in enumerate(voices):
-        print(v.id, f'\t[{i}]')
-        engine.setProperty('voice', v.id)
-        engine.say('this is a test message')
-    engine.runAndWait()
-
-
-if __name__ == '__main__':
-    test()
+        self._save_users()
+        self.running = False

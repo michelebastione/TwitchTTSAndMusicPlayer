@@ -3,5 +3,5 @@ __pycache__/
 venv/
 venv37/
 
-twitch_config.json
+appsettings.json
 users.json

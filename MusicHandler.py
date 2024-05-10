@@ -1,97 +1,95 @@
 import os
 import json
 import threading
-import pygame
-from pygame import mixer
+from queue import Queue
 
-with open("music_config.json") as file:
-    config = json.load(file)
-    MUSIC_DIR, EDITORS = config["directory"], config["editors"]
+import contextlib
+from typing import List
+
+with contextlib.redirect_stdout(None):
+    import pygame
+    from pygame import mixer
 
 
 class MusicHandler(threading.Thread):
-    def __init__(self, name="MediaHandler"):
+    def __init__(self, name="MediaHandler", music_dir="", editors: List[str] = None):
         threading.Thread.__init__(self)
         self.name = name
-        self.msg_queue = []
-        self.song_queue = []
-        self.playlist_condition = threading.Condition()
+        self.folder = music_dir
+        self.editors = editors
+
+        self.__msg_queue: Queue[tuple[str, str]] = Queue()
+        self.__song_queue: Queue[str] = Queue()
+        self.__audio_end_event = pygame.NOEVENT
         self.msg_condition = threading.Condition()
-        self.audio_end_event = pygame.NOEVENT
         self.running = False
-        self.is_playing = False
+        self.playing = False
 
     def __init_music_player(self):
         pygame.init()
         mixer.init()
-        self.audio_end_event = pygame.event.custom_type()
-        mixer.music.set_endevent(self.audio_end_event)
-        self.player_was_init = True
+        self.__audio_end_event = pygame.event.custom_type()
+        mixer.music.set_endevent(self.__audio_end_event)
+
+    def receive(self, username, message):
+        self.__msg_queue.put((username, message))
 
     def __load_from_queue(self):
-        self.playlist_condition.acquire()
-        if self.song_queue:
+        if not self.__song_queue.empty():
+            song = self.__song_queue.get()
+            self.__song_queue.task_done()
+
             try:
-                song = self.song_queue.pop(0)
                 mixer.music.load(song)
                 mixer.music.play()
-                self.is_playing = True
+                self.playing = True
             except Exception as e:
                 print(f"ERROR: {e.args[0]}")
-        self.playlist_condition.notify()
-        self.playlist_condition.release()
 
-    def __add_to_queue(self, filename):
-        path = os.path.join(MUSIC_DIR, filename)
-        self.playlist_condition.acquire()
-        self.song_queue.append(path)
-        self.playlist_condition.notify()
-        self.playlist_condition.release()
+    def __add_song(self, filename):
+        self.__song_queue.put(filename)
 
     def __skip_song(self):
-        mixer.music.stop()
-        self.__load_from_queue()
+        if self.__song_queue.empty():
+            mixer.music.stop()
+        else:
+            self.__load_from_queue()
 
     @staticmethod
-    def __search_song(name):
-        for filename in os.listdir(MUSIC_DIR):
+    def __search_song(name, folder):
+        for filename in os.listdir(folder):
             if name.lower() in os.path.splitext(filename)[0].lower():
                 return filename
         else:
             return ""
 
-    def receive(self, username, message):
-        self.msg_condition.acquire()
-        self.msg_queue.append((username, message))
-        self.msg_condition.notify()
-        self.msg_condition.release()
+    @staticmethod
+    def __load_config():
+        with open("music_config.json") as m_config:
+            conf = json.load(m_config)
+            m_dir, editors = conf["directory"], conf["editors"]
 
-    def stop(self):
-        self.msg_condition.acquire()
-        mixer.music.stop()
-        mixer.music.unload()
-        pygame.event.post(pygame.event.Event(pygame.QUIT))
-        self.msg_condition.notify()
-        self.msg_condition.release()
+        with open("appsettings.json") as t_config:
+            conf = json.load(t_config)
+            editors.append(conf["nickname"])
+
+        return m_dir, editors
 
     def run(self):
-        print("Media handler starting!")
+        print("Music handler starting!")
         self.running = True
         self.__init_music_player()
 
         while self.running:
             for event in pygame.event.get():
                 match event.type:
-                    case self.audio_end_event:
+                    case self.__audio_end_event:
                         # at the end of a song we start playing the next one from the queue
-                        self.playlist_condition.acquire()
-                        self.is_playing = False
+                        self.playing = False
                         self.__load_from_queue()
-                        self.playlist_condition.notify()
-                        self.playlist_condition.release()
                     case pygame.QUIT:
+                        # we have to use pygame.quit() inside the event loop in order to stop it gracefully
                         self.running = False
-                        # the quit method has to be inside the event loop so that we can exit it gracefully
                         pygame.quit()
                         break
                     case _:
@@ -99,62 +97,47 @@ class MusicHandler(threading.Thread):
 
             if not self.running:
                 break
-            if not self.msg_queue:
+            if self.__msg_queue.empty():
                 continue
 
-            self.msg_condition.acquire()
-            for user, command in self.msg_queue:
-                try:
-                    if command.startswith("!sr "):
-                        song = self.__search_song(command[4:])
-                        if song:
-                            self.__add_to_queue(os.path.join(MUSIC_DIR, song))
-                            print(f"{os.path.splitext(song)[0]} added to queue.")
-                            if not self.is_playing:
-                                self.__load_from_queue()
-                        else:
-                            print("A matching song was not found.")
+            user, command = self.__msg_queue.get()
+            self.__msg_queue.task_done()
 
-                    elif user in EDITORS:
-                        if command.startswith("!vol ") and len(command) > 5:
-                            curr_vol = mixer.music.get_volume()
-                            match command.split()[1]:
-                                case "up":   mixer.music.set_volume(curr_vol + 0.1)
-                                case "down": mixer.music.set_volume(curr_vol - 0.1)
-                                case _ as value:
-                                    if value.isdigit():
-                                        mixer.music.set_volume(int(value) / 100)
-                        else:
-                            match command:
-                                case "!play":   mixer.music.unpause()
-                                case "!pause":  mixer.music.pause()
-                                case "!skip":   self.__skip_song()
-                                case "!rewind": mixer.music.rewind()
-                                case _: pass
+            try:
+                if command.startswith("!sr "):
+                    song = self.__search_song(command[4:], self.folder)
+                    if song:
+                        self.__add_song(os.path.join(self.folder, song))
+                        print(f"{os.path.splitext(song)[0]} added to queue.")
+                        if not self.playing:
+                            self.__load_from_queue()
+                    else:
+                        print("A matching song was not found.")
 
-                except Exception as e:
-                    print(e.args[0])
+                elif user in self.editors:
+                    if command.startswith("!vol ") and len(command) > 5:
+                        curr_vol = mixer.music.get_volume()
+                        match command.split()[1]:
+                            case "up":   mixer.music.set_volume(curr_vol + 0.1)
+                            case "down": mixer.music.set_volume(curr_vol - 0.1)
+                            case _ as value:
+                                if value.isdigit():
+                                    mixer.music.set_volume(int(value) / 100)
+                    else:
+                        match command:
+                            case "!play":   mixer.music.unpause()
+                            case "!pause":  mixer.music.pause()
+                            case "!skip":   self.__skip_song()
+                            case "!rewind": mixer.music.rewind()
+                            case _: pass
 
-            self.msg_queue.clear()
-            self.msg_condition.release()
+            except Exception as e:
+                print("Error: " + e.args[0])
 
-        print("Media handler stopping")
-
-
-if __name__ == "__main__":
-    pygame.init()
-    mixer.init()
-    audio_end_evt = pygame.event.custom_type()
-    mixer.music.set_endevent(audio_end_evt)
-    mixer.music.load(os.path.join(MUSIC_DIR, "test.wav"))
-    mixer.music.play()
-
-    check = True
-    while check:
-        for evt in pygame.event.get():
-            if evt.type == audio_end_evt:
-                print("end")
-                pygame.quit()
-                check = False
-                break
-                
+    def stop(self):
+        if self.running:
+            print("Music handler stopping")
+            mixer.music.unload()
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        else:
+            print("The music handler is not running")

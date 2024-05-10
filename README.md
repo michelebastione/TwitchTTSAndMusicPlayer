@@ -1,6 +1,6 @@
 # Twitch TTS and Music Player
 
-This is a custom text to speech program using the **pyttsx3** library and the capability of playing chat song requests from chat directly from the server
+This is a custom text to speech program using the **pyttsx3** library and the ability to play chat song requests directly on the host using **pygame**'s **mixer** library.
 
 Gives new users a random voice selected from the ones installed, and allows them to change their voice using the `!voice` command. 
 Add a song request to the queue by typing `!sr` followed by the song name or part of it
@@ -8,15 +8,15 @@ Add a song request to the queue by typing `!sr` followed by the song name or par
 ## Installation
 
 1. Install the latest version of [Python](https://www.python.org/downloads/).
-2. Download the [contents of this repository](https://github.com/Skyhawk33/TwitchTTS/archive/refs/heads/main.zip) and unzip them into a folder.
+2. Download the [contents of this repository](https://github.com/michelebastione/TwitchTTSAndMusicPlayer/archive/refs/heads/main.zip) and unzip them into a folder.
 3. Open the command line and run the following command:
 	`pip install -r requirements.txt`
-4. Open `twitch_config.json` with Notepad and do the following:
-	- Generate an OAuth token for your channel using [this tool](https://twitchapps.com/tmi/) and replace `TOKENHERE` with the generated token.
-	- Replace `#channelname` with the name of your channel (keeping the `#`).
-5. Open `music_config.json` and do the following:
-	- At the voice "directory", add the local path to your music folder.
-	- At the voice "editors", Add the nicknames of the users you want to make able to skip songs, change volume, etc..., including yourself.
+4. Open `appsettings.json` with your text editor of choice and do the following:
+	- Generate an OAuth token for your channel using [this tool](https://twitchapps.com/tmi/) and replace `twitch\TOKEN_HERE` with the generated token.
+	- Replace `twitch\nickname` and `twitch\#channelname` with the name of your channel (keeping the `#` in the latter).
+	- At the voice `music\directory`, add the local path to your music folder.
+	- At the voice `music\editors`, Add the nicknames of the users you want to make able to skip songs, change volume, etc...
+5. (Optional) Ban specific users from using tts adding them to `tts\banned`
 6. The TTS and Music Player is now ready to be used, and can be ran by double clicking `Main.py`.
 
 ## Installing Alternate Voices
