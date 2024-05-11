@@ -45,6 +45,6 @@ if __name__ == '__main__':
     with open("appsettings.json") as config_file:
         config = json.load(config_file)
 
-    reader = TwitchReader(config, tts_handler=TTSHandler())
+    reader = TwitchReader(config, tts=TTSHandler())
     reader.debug_output = True
     reader.run()

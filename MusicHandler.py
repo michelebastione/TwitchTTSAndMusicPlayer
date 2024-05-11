@@ -2,26 +2,32 @@ import os
 import json
 import threading
 from queue import Queue
+from Utils import trace_exception
+from typing import List, Callable
 
 import contextlib
-from typing import List
-
 with contextlib.redirect_stdout(None):
     import pygame
     from pygame import mixer
 
 
 class MusicHandler(threading.Thread):
-    def __init__(self, name="MediaHandler", music_dir="", editors: List[str] = None):
+    def __init__(self,
+                 name="MediaHandler",
+                 music_dir="",
+                 editors: List[str] = None,
+                 callback: Callable[[str], None] = lambda x: None):
+
         threading.Thread.__init__(self)
         self.name = name
         self.folder = music_dir
         self.editors = editors
+        self.__callback = callback
 
         self.__msg_queue: Queue[tuple[str, str]] = Queue()
         self.__song_queue: Queue[str] = Queue()
         self.__audio_end_event = pygame.NOEVENT
-        self.msg_condition = threading.Condition()
+
         self.running = False
         self.playing = False
 
@@ -31,7 +37,7 @@ class MusicHandler(threading.Thread):
         self.__audio_end_event = pygame.event.custom_type()
         mixer.music.set_endevent(self.__audio_end_event)
 
-    def receive(self, username, message):
+    def add_message(self, username, message):
         self.__msg_queue.put((username, message))
 
     def __load_from_queue(self):
@@ -44,7 +50,7 @@ class MusicHandler(threading.Thread):
                 mixer.music.play()
                 self.playing = True
             except Exception as e:
-                print(f"ERROR: {e.args[0]}")
+                trace_exception(e)
 
     def __add_song(self, filename):
         self.__song_queue.put(filename)
@@ -76,9 +82,10 @@ class MusicHandler(threading.Thread):
         return m_dir, editors
 
     def run(self):
-        print("Music handler starting!")
+        print("Music handler is starting...")
         self.running = True
         self.__init_music_player()
+        print("Music handler has been started correctly")
 
         while self.running:
             for event in pygame.event.get():
@@ -108,7 +115,7 @@ class MusicHandler(threading.Thread):
                     song = self.__search_song(command[4:], self.folder)
                     if song:
                         self.__add_song(os.path.join(self.folder, song))
-                        print(f"{os.path.splitext(song)[0]} added to queue.")
+                        self.__callback(f"{os.path.splitext(song)[0]} has been added to the queue.")
                         if not self.playing:
                             self.__load_from_queue()
                     else:
@@ -117,12 +124,16 @@ class MusicHandler(threading.Thread):
                 elif user in self.editors:
                     if command.startswith("!vol ") and len(command) > 5:
                         curr_vol = mixer.music.get_volume()
+                        new_vol = curr_vol
                         match command.split()[1]:
-                            case "up":   mixer.music.set_volume(curr_vol + 0.1)
-                            case "down": mixer.music.set_volume(curr_vol - 0.1)
+                            case "up":   new_vol = curr_vol + 0.1
+                            case "down": new_vol = curr_vol - 0.1
                             case _ as value:
                                 if value.isdigit():
-                                    mixer.music.set_volume(int(value) / 100)
+                                    new_vol = int(value) / 100
+                        mixer.music.set_volume(new_vol)
+                        self.__callback(f"Volume now set to {new_vol * 100}")
+
                     else:
                         match command:
                             case "!play":   mixer.music.unpause()
@@ -132,11 +143,11 @@ class MusicHandler(threading.Thread):
                             case _: pass
 
             except Exception as e:
-                print("Error: " + e.args[0])
+                trace_exception(e)
 
     def stop(self):
         if self.running:
-            print("Music handler stopping")
+            print("Music handler is stopping...")
             mixer.music.unload()
             pygame.event.post(pygame.event.Event(pygame.QUIT))
         else:

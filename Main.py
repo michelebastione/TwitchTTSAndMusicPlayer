@@ -1,40 +1,28 @@
 import json
 import time
-
+from Utils import trace_exception
 from TwitchReader import TwitchReader
-from TTSHandler import TTSHandler
-from MusicHandler import MusicHandler
 
 
 if __name__ == '__main__':
-    with open("appsettings.json") as config_file:
-        config = json.load(config_file)
+    try:
+        print("The application is initializing...\n")
 
-    tts_config = config["tts"]
-    tts = TTSHandler(tts_config)
+        with open("appsettings.dev.json") as config_file:
+            config = json.load(config_file)
 
-    music_dir = config["music"]["directory"]
-    editors = config["music"]["editors"] + [config["twitch"]["nickname"]]
-    music = MusicHandler(music_dir=music_dir, editors=editors)
+        reader = TwitchReader(config, tts=True, music=True)
+        reader.start()
 
-    twitch_config = config["twitch"]
-    reader = TwitchReader(twitch_config, tts_handler=tts, music_handler=music)
+        # wait for twitch reader to start
+        while not reader.running:
+            time.sleep(0.05)
 
-    tts.start()
-    music.start()
-    reader.start()
+        input('\nENTER ANYTHING TO HALT\n')
 
-    # wait for twitch reader to start
-    while not reader.running:
-        time.sleep(0.05)
+        reader.stop()
+        reader.join()
+        print('The application is shutting down')
 
-    input('Main: ENTER ANYTHING TO HALT\r\n')
-
-    tts.stop()
-    music.stop()
-    reader.stop()
-
-    tts.join()
-    music.join()
-    reader.join()
-    print('Main: closing')
+    except Exception as e:
+        trace_exception(e, "Fatal error")
