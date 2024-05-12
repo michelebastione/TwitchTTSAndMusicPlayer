@@ -8,7 +8,7 @@ if __name__ == '__main__':
     try:
         print("The application is initializing...\n")
 
-        with open("appsettings.dev.json") as config_file:
+        with open("appsettings.json") as config_file:
             config = json.load(config_file)
 
         reader = TwitchReader(config, tts=True, music=True)
