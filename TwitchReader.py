@@ -10,7 +10,7 @@ from MusicHandler import MusicHandler
 
 class TwitchReader(threading.Thread):
     TTS_COMMANDS = {"!voice "}
-    MUSIC_COMMANDS = {"!sr ", "!play", "!pause", "!skip", "!rewind", "!vol "}
+    MUSIC_COMMANDS = {"!sr ", "!play", "!pause", "!skip", "!rewind", "!vol ", "!songs"}
     MSG_PATTERN = re.compile(r':(.*)!.*@.*\.tmi\.twitch\.tv PRIVMSG #(.*?) :(.*)')
     LINK_PATTERN = re.compile(r'http(s?)://\S+|\S+\.com/\S+')
 

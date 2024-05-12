@@ -12,6 +12,8 @@ with contextlib.redirect_stdout(None):
 
 
 class MusicHandler(threading.Thread):
+    AUDIO_FORMATS = (".mp3", ".ogg", ".wav")
+
     def __init__(self,
                  name="MediaHandler",
                  music_dir="",
@@ -62,12 +64,25 @@ class MusicHandler(threading.Thread):
             self.__load_from_queue()
 
     @staticmethod
-    def __search_song(name, folder):
-        for filename in os.listdir(folder):
+    def _get_songs(folder):
+        return [*filter(
+            lambda x: os.path.splitext(x)[1] in MusicHandler.AUDIO_FORMATS,
+            os.listdir(folder)
+        )]
+
+    @staticmethod
+    def _search_song(name, folder):
+        songs = MusicHandler._get_songs(folder)
+
+        if name.isdigit():
+            i = int(name)
+            if len(songs) >= i > 0:
+                return songs[i - 1]
+
+        for filename in songs:
             if name.lower() in os.path.splitext(filename)[0].lower():
                 return filename
-        else:
-            return ""
+        return ""
 
     @staticmethod
     def __load_config():
@@ -111,15 +126,15 @@ class MusicHandler(threading.Thread):
             self.__msg_queue.task_done()
 
             try:
-                if command.startswith("!sr "):
-                    song = self.__search_song(command[4:], self.folder)
+                if command.startswith("!sr ") and len(command) > 4:
+                    song = self._search_song(command[4:], self.folder)
                     if song:
                         self.__add_song(os.path.join(self.folder, song))
                         self.__callback(f"{os.path.splitext(song)[0]} has been added to the queue.")
                         if not self.playing:
                             self.__load_from_queue()
                     else:
-                        print("A matching song was not found.")
+                        self.__callback("A matching song was not found.")
 
                 elif user in self.editors:
                     if command.startswith("!vol ") and len(command) > 5:
@@ -140,6 +155,10 @@ class MusicHandler(threading.Thread):
                             case "!pause":  mixer.music.pause()
                             case "!skip":   self.__skip_song()
                             case "!rewind": mixer.music.rewind()
+                            case "!songs": self.__callback(
+                                ", ".join(f"{i}. {os.path.splitext(name)[0]}"
+                                          for i, name in enumerate(self._get_songs(self.folder), 1))
+                            )
                             case _: pass
 
             except Exception as e:

@@ -3,7 +3,8 @@
 This is a custom text to speech program using the **pyttsx3** library and the ability to play chat song requests directly on the host using **pygame**'s **mixer** library.
 
 Gives new users a random voice selected from the ones installed, and allows them to change their voice using the `!voice` command. 
-Add a song request to the queue by typing `!sr` followed by the song name or part of it
+Add a song request to the queue by typing `!sr` followed by the song name or part of it, or even its index in the list.
+Available audio formats are `.mp3` `.wav` and `.ogg`.
 
 ## Installation
 
@@ -62,7 +63,8 @@ The `rate` is a number (the default is 200).
 
 
 ## Music Player commands
-Users can add songs to the playlist by typing `!sr` followed by the song name or part of it in chat, if a match is found in the specified music directory it will be reproduced.
+Users in chat can add songs to the playlist by typing `!sr` followed by the song name, part of it, or even its index. 
+If a match is found in the specified music directory of the host computer the song will be added to the reproduction queue.
 
 Users specified as editors can also use the following commands:
 - `!pause`: Pause the reproduction
@@ -72,3 +74,4 @@ Users specified as editors can also use the following commands:
 - `!vol up`: Increase volume by 10%
 - `!vol down`: Decrease volume by 10%
 - `!vol [value]`: Sets the volume to the specified value (1-100)
+- `!songs`: Show list of all possible songs to request
