@@ -25,4 +25,4 @@ if __name__ == '__main__':
         print('The application is shutting down')
 
     except Exception as e:
-        trace_exception(e, "Fatal error")
+        trace_exception(e, "Fatal")

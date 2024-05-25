@@ -1,5 +1,4 @@
 import os
-import json
 import threading
 from queue import Queue
 from Utils import trace_exception
@@ -24,7 +23,7 @@ class MusicHandler(threading.Thread):
         self.name = name
         self.folder = music_dir
         self.editors = editors
-        self.__callback = callback
+        self.__reply = callback
 
         self.__msg_queue: Queue[tuple[str, str]] = Queue()
         self.__song_queue: Queue[str] = Queue()
@@ -54,7 +53,7 @@ class MusicHandler(threading.Thread):
             except Exception as e:
                 trace_exception(e)
 
-    def __add_song(self, filename):
+    def __add_song(self, filename: str):
         self.__song_queue.put(filename)
 
     def __skip_song(self):
@@ -64,14 +63,14 @@ class MusicHandler(threading.Thread):
             self.__load_from_queue()
 
     @staticmethod
-    def _get_songs(folder):
+    def _get_songs(folder: str):
         return [*filter(
             lambda x: os.path.splitext(x)[1] in MusicHandler.AUDIO_FORMATS,
             os.listdir(folder)
         )]
 
     @staticmethod
-    def _search_song(name, folder):
+    def _search_song(name: str, folder: str):
         songs = MusicHandler._get_songs(folder)
 
         if name.isdigit():
@@ -83,18 +82,6 @@ class MusicHandler(threading.Thread):
             if name.lower() in os.path.splitext(filename)[0].lower():
                 return filename
         return ""
-
-    @staticmethod
-    def __load_config():
-        with open("music_config.json") as m_config:
-            conf = json.load(m_config)
-            m_dir, editors = conf["directory"], conf["editors"]
-
-        with open("appsettings.json") as t_config:
-            conf = json.load(t_config)
-            editors.append(conf["nickname"])
-
-        return m_dir, editors
 
     def run(self):
         print("Music handler is starting...")
@@ -117,52 +104,47 @@ class MusicHandler(threading.Thread):
                     case _:
                         pass
 
-            if not self.running:
-                break
-            if self.__msg_queue.empty():
-                continue
+            if self.running and not self.__msg_queue.empty():
+                user, command = self.__msg_queue.get()
+                self.__msg_queue.task_done()
 
-            user, command = self.__msg_queue.get()
-            self.__msg_queue.task_done()
+                try:
+                    if command.startswith("!sr ") and len(command) > 4:
+                        song = self._search_song(command[4:], self.folder)
+                        if song:
+                            self.__add_song(os.path.join(self.folder, song))
+                            self.__reply(f"{os.path.splitext(song)[0]} has been added to the queue.")
+                            if not self.playing:
+                                self.__load_from_queue()
+                        else:
+                            self.__reply("A matching song was not found.")
 
-            try:
-                if command.startswith("!sr ") and len(command) > 4:
-                    song = self._search_song(command[4:], self.folder)
-                    if song:
-                        self.__add_song(os.path.join(self.folder, song))
-                        self.__callback(f"{os.path.splitext(song)[0]} has been added to the queue.")
-                        if not self.playing:
-                            self.__load_from_queue()
-                    else:
-                        self.__callback("A matching song was not found.")
+                    elif user in self.editors:
+                        if command.startswith("!vol ") and len(command) > 5:
+                            curr_vol = mixer.music.get_volume()
+                            new_vol = curr_vol
+                            match command.split()[1]:
+                                case "up":   new_vol = curr_vol + 0.1
+                                case "down": new_vol = curr_vol - 0.1
+                                case _ as value:
+                                    if value.isdigit():
+                                        new_vol = int(value) / 100
+                            mixer.music.set_volume(new_vol)
+                            self.__reply(f"Volume now set to {new_vol * 100}")
 
-                elif user in self.editors:
-                    if command.startswith("!vol ") and len(command) > 5:
-                        curr_vol = mixer.music.get_volume()
-                        new_vol = curr_vol
-                        match command.split()[1]:
-                            case "up":   new_vol = curr_vol + 0.1
-                            case "down": new_vol = curr_vol - 0.1
-                            case _ as value:
-                                if value.isdigit():
-                                    new_vol = int(value) / 100
-                        mixer.music.set_volume(new_vol)
-                        self.__callback(f"Volume now set to {new_vol * 100}")
+                        else:
+                            match command:
+                                case "!play":   mixer.music.unpause()
+                                case "!pause":  mixer.music.pause()
+                                case "!skip":   self.__skip_song()
+                                case "!rewind": mixer.music.rewind()
+                                case "!songs": self.__reply(
+                                    ", ".join(f"{i}. {os.path.splitext(name)[0]}"
+                                              for i, name in enumerate(self._get_songs(self.folder), 1)))
+                                case _: pass
 
-                    else:
-                        match command:
-                            case "!play":   mixer.music.unpause()
-                            case "!pause":  mixer.music.pause()
-                            case "!skip":   self.__skip_song()
-                            case "!rewind": mixer.music.rewind()
-                            case "!songs": self.__callback(
-                                ", ".join(f"{i}. {os.path.splitext(name)[0]}"
-                                          for i, name in enumerate(self._get_songs(self.folder), 1))
-                            )
-                            case _: pass
-
-            except Exception as e:
-                trace_exception(e)
+                except Exception as e:
+                    trace_exception(e)
 
     def stop(self):
         if self.running:

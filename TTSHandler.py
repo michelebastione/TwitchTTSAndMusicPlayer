@@ -4,6 +4,7 @@ import random
 import threading
 from queue import Queue
 from Utils import trace_exception
+
 import typing
 from typing import List, Callable, Dict
 import pyttsx3
@@ -20,7 +21,7 @@ class TTSHandler(threading.Thread):
         self.name = name
         self.banned_from_tts = config["banned"]
         self.users_settings = config["users_settings"]
-        self.__callback = callback
+        self.__reply = callback
 
         self.__engine: pyttsx3.Engine | None = None
         self.__message_queue: Queue[tuple[str, str]] = Queue()
@@ -32,55 +33,52 @@ class TTSHandler(threading.Thread):
         filename = self.users_settings
         if os.path.exists(filename):
             with open(filename) as file:
-                return json.load(file)
-        else:
-            return {}
+                text = file.read()
+                return json.loads(text) if text != "" else {}
 
     def _save_users(self):
         filename = self.users_settings
         with open(filename, 'w') as f:
             json.dump(self._users, f)
 
-    def add_message(self, username, message):
+    def add_message(self, username: str, message: str):
         self.__message_queue.put((username, message))
 
-    def __change_voice(self, username, message):
+    def __change_voice(self, username: str, message: str):
         tokens = message.split()
-        if tokens[0] != '!voice':
-            return False
+        name = tokens[1].upper()
 
-        voice_name = tokens[1].upper()
-        user_voice = self._users[username][0]
+        current_voice, current_rate = self._users[username]
+        if len(tokens) > 2 and tokens[2].isdigit():
+            current_rate = int(tokens[2])
 
         for index, voice in enumerate(self._voices):
-            id_name = str(voice.id).rsplit('\\', 1)[1].strip('1234567890._').upper()
+            voice_id = str(voice.id).rsplit('\\', 1)[-1].upper()
 
             # handle 2-letter codes separately, so that we don't just match the first name that contains those letters
-            if len(voice_name) == 2 and f'{voice_name}-' in id_name or f'{voice_name}_' in id_name:
-                user_voice = index
-                break
-            elif voice_name in id_name:
-                user_voice = index
+            if (len(name) == 2 and f'{name}-' in voice_id or f'{name}_' in voice_id) or name in voice_id:
+                current_voice = index
                 break
 
-        try:
-            rate = int(tokens[-1])
-        except ValueError:
-            rate = self._users[username][1]
+        self._users[username] = (current_voice, current_rate)
 
-        self._users[username] = (user_voice, rate)
-        return True
+    def __speak(self, username: str, message: str):
+        voice, rate = self._users[username]
+        self.__engine.setProperty('voice', self._voices[voice].id)
+        self.__engine.setProperty('rate', rate)
+
+        if message:
+            self.__engine.say(message)
 
     def run(self):
         print('TTS Handler is starting...')
         self.__engine = pyttsx3.init()
         self.__engine.startLoop(False)
-        self._voices = typing.cast(list[Voice], self.__engine.getProperty('voices'))
+        self._voices = typing.cast(List[Voice], self.__engine.getProperty('voices'))
         print("TTS handler has been started correctly")
 
-        self.running = True
         try:
-
+            self.running = True
             while self.running:
                 if self.__message_queue.empty():
                     self.__engine.iterate()
@@ -89,23 +87,15 @@ class TTSHandler(threading.Thread):
                 username, message = self.__message_queue.get()
                 self.__message_queue.task_done()
 
-                if username in self.banned_from_tts:
-                    continue
-                if username not in self._users:
-                    self._users[username] = (random.randrange(len(self._voices)), random.randint(180, 220))
+                if username not in self.banned_from_tts:
+                    if username not in self._users or self._users[username][0] >= len(self._voices):
+                        self._users[username] = (random.randrange(len(self._voices)), random.randint(180, 220))
 
-                if message.startswith('!voice '):
-                    if self.__change_voice(username, message):
-                        self.__engine.setProperty('voice', self._voices[self._users[username][0]].id)
-                        self.__engine.setProperty('rate', self._users[username][1])
-                        self.__engine.say(f'{username} has changed voices')
-                else:
-                    try:
-                        self.__engine.setProperty('voice', self._voices[self._users[username][0]].id)
-                    except IndexError:
-                        self.__engine.setProperty('voice', self._voices[0].id)
-                    self.__engine.setProperty('rate', self._users[username][1])
-                    self.__engine.say(message)
+                    if message.startswith('!voice '):
+                        self.__change_voice(username, message)
+                        self.__speak(username, f'{username} has changed voices')
+                    else:
+                        self.__speak(username, message)
 
             self.__engine.endLoop()
 

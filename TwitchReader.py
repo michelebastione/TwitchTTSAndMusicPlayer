@@ -56,13 +56,13 @@ class TwitchReader(threading.Thread):
 
     async def __read(self):
         msg = await self.__stream_reader.read(2048)
-        return msg.decode('utf8')
+        return msg.decode('utf-8')
 
-    async def __write(self, message):
+    async def __write(self, message: str):
         self.__stream_writer.write(message.encode("utf-8"))
         await self.__stream_writer.drain()
 
-    def callback_handler(self, cb_arg):
+    def callback_handler(self, cb_arg: str):
         self.__replies_queue.put(cb_arg)
 
     async def __handle_incoming_messages(self):
@@ -80,9 +80,9 @@ class TwitchReader(threading.Thread):
 
                     if self.debug_output:
                         print(raw_msg)
+
             except Exception as e:
                 trace_exception(e)
-        return 0
 
     async def __handle_outgoing_replies(self):
         channel = self._config["twitch"]["channel"]
@@ -95,9 +95,9 @@ class TwitchReader(threading.Thread):
                 reply = self.__replies_queue.get()
                 self.__replies_queue.task_done()
                 await self.__write(f'PRIVMSG {channel} :{reply}\n')
+
             except Exception as e:
                 trace_exception(e)
-        return 0
 
     async def __handle_client(self):
         print('Connecting to Twitch...')
@@ -118,7 +118,7 @@ class TwitchReader(threading.Thread):
             await aio.gather(incoming_task, outgoing_task)
 
         except aio.CancelledError:
-            print(f"A task was cancelled during handling of chat messages")
+            print("A task was cancelled during handling of chat messages")
         except Exception as e:
             trace_exception(e)
         finally:
@@ -132,11 +132,10 @@ class TwitchReader(threading.Thread):
 
         if self._tts_handler:
             self._tts_handler.stop()
+            self._tts_handler.join()
         if self._music_handler:
             self._music_handler.stop()
-
-        self._tts_handler.join()
-        self._music_handler.join()
+            self._music_handler.join()
 
         print("Disconnecting from Twitch...")
         self.__stream_writer.close()
