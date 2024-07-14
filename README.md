@@ -1,9 +1,9 @@
 # Twitch TTS and Music Player
 
-This is a custom text to speech program using the **pyttsx3** library and the ability to play chat song requests directly on the host using **pygame**'s **mixer** library.
+This is a custom text to speech program using the **pyttsx3** library with the ability to play chat song requests directly on the host using **pygame**'s **mixer** library.
 
 Gives new users a random voice selected from the ones installed, and allows them to change their voice using the `!voice` command. 
-Add a song request to the queue by typing `!sr` followed by the song name or part of it, or even its index in the list.
+Add a song request to the queue by typing `!sr` followed by the song name or part of it, or even its index in the list!
 Available audio formats are `.mp3` `.wav` and `.ogg`.
 
 ## Installation
@@ -18,7 +18,7 @@ Available audio formats are `.mp3` `.wav` and `.ogg`.
 	- At the voice `music\directory`, add the local path to your music folder.
 	- At the voice `music\editors`, Add the nicknames of the users you want to make able to skip songs, change volume, etc...
 5. (Optional) Ban specific users from using tts adding them to `tts\banned`
-6. The TTS and Music Player is now ready to be used, and can be ran by double clicking `Main.py`.
+6. The TTS and Music Player is now ready to be used, and can be run by double clicking `Main.py`.
 
 ## Installing Alternate Voices
 

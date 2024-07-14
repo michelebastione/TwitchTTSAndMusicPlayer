@@ -20,6 +20,7 @@ class TTSHandler(threading.Thread):
         threading.Thread.__init__(self)
         self.name = name
         self.banned_from_tts = config["banned"]
+        self.min_rate, self.max_rate = config["min_max_rate"]
         self.users_settings = config["users_settings"]
         self.__reply = callback
 
@@ -50,7 +51,12 @@ class TTSHandler(threading.Thread):
 
         current_voice, current_rate = self._users[username]
         if len(tokens) > 2 and tokens[2].isdigit():
-            current_rate = int(tokens[2])
+            rate = int(tokens[2])
+            current_rate = (
+                self.min_rate if rate < self.min_rate
+                else self.max_rate if rate > self.max_rate
+                else rate
+            )
 
         for index, voice in enumerate(self._voices):
             voice_id = str(voice.id).rsplit('\\', 1)[-1].upper()
